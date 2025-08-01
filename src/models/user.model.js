@@ -41,12 +41,54 @@ const pool = require('../db');
 
 
 async function  loginUser (email, password) {
-
+/*
   const res = await pool.query(
     'SELECT * FROM users WHERE email = $1 AND password = $2',
     [email, password]
   );
+  console.log("----", res.rows[0])
   return res.rows[0]; 
+*/
+const res = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+
+  if (res.rows.length === 0) {
+    return null; // Usuario no encontrado
+  }
+
+  const user = res.rows[0];
+
+  // 2. Comparar contraseñas
+ /* const passwordMatch = await bcrypt.compare(password, user.password);
+  if (!passwordMatch) {
+    return null; // Contraseña incorrecta
+  }*/
+
+  // 3. Obtener permisos según rol
+  let permisosRes;
+  if (user.role_id === 1) {
+    // Admin: todos los permisos del rol
+    permisosRes = await pool.query(`
+      SELECT p.nombre 
+      FROM rol_permiso rp
+      JOIN permiso p ON p.id = rp.permiso_id
+      WHERE rp.rol_id = $1
+    `, [user.role_id]);
+  } else {
+    // User: permisos delegados
+    permisosRes = await pool.query(`
+      SELECT p.nombre 
+      FROM usuario_permiso up
+      JOIN permiso p ON p.id = up.permiso_id
+      WHERE up.usuario_id = $1
+    `, [user.id]);
+  }
+
+  const permisos = permisosRes.rows.map(row => row.nombre);
+
+    console.log("----", res.rows[0], permisos)
+  //return res.rows[0],permisos; 
+  return {user,permisos}
+
 };
 
 

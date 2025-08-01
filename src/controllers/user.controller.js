@@ -65,29 +65,46 @@ exports.updateUser = async (req, res) => {
 exports.accederUsuario = async (req, res) => {
   try {
     const { email, password } = req.body; // ← Usar req.body para POST
- // Verifica campos vacíos
+    // Verifica campos vacíos
     if (!email || !password) {
       return res.status(400).json({ message: "Email y contraseña requeridos" });
     }
 
     // Busca el usuario en la base de datos
-    const user = await UserModel.loginUser(email, password);
+    //const user = await UserModel.loginUser(email, password);
+    // Busca el usuario y permisos en la base de datos
+    const loginResult = await UserModel.loginUser(email, password);
 
-    if (user) {
-         // Guarda el usuario en la sesión
-        req.session.user = {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      };
-      console.log("----", user);
-        return res.json({ message: "Login exitoso", user: req.session.user });
-
-    } else {
+    if (!loginResult || !loginResult.user) {
       return res.status(401).json({ message: "Credenciales incorrectas" });
     }
 
+    // Extrae usuario y permisos del resultado
+    const { user, permisos } = loginResult;
+
+    // Guarda la información relevante en la sesión
+    req.session.user = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      role_id: user.role_id,
+      permisos: permisos // ← Añadimos los permisos a la sesión
+    };
+
+    console.log("Login exitoso para:", user.email);
+
+return res.json({ 
+      message: "Login exitoso", 
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        role_id: user.role_id
+      },
+      permisos: permisos 
+    });
   } catch (error) {
     console.error('Error en login:', error);
     res.status(500).json({ message: "Error interno del servidor" });
