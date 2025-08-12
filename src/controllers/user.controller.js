@@ -47,6 +47,7 @@ exports.getUserById = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
   const { id } = req.params;
+   
   const data = req.body; // Aquí vienen los datos nuevos (name, email, etc)
 
   try {
@@ -94,8 +95,8 @@ exports.accederUsuario = async (req, res) => {
 
     console.log("Login exitoso para:", user.email);
 
-return res.json({ 
-      message: "Login exitoso", 
+    return res.json({
+      message: "Login exitoso",
       user: {
         id: user.id,
         name: user.name,
@@ -103,7 +104,7 @@ return res.json({
         role: user.role,
         role_id: user.role_id
       },
-      permisos: permisos 
+      permisos: permisos
     });
   } catch (error) {
     console.error('Error en login:', error);
@@ -124,6 +125,72 @@ exports.getUserById = async (req, res) => {
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 };
+
+
+
+// para crer un usuario con permisos
+
+
+exports.crearUsuario = async (req, res) => {
+  try {
+    const { usuario, permisosIds } = req.body;
+
+    if (!usuario.name || !usuario.email || !usuario.password || !usuario.role_id) {
+      return res.status(400).json({ message: 'Faltan datos obligatorios' });
+    }
+
+    const result = await UserModel.crearUsuarioConPermisos(usuario, permisosIds || []);
+
+    res.status(201).json({ message: 'Usuario creado correctamente', userId: result.userId });
+  } catch (error) {
+    console.error('Error al crear usuario:', error);
+    res.status(500).json({ message: 'Error al crear usuario' });
+  }
+};
+
+
+
+exports.getPermiso = async (req, res) => {
+  try {
+    const permisos = await UserModel.permisoAll();
+    res.json(permisos);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+// controlador del Models para eluminar uusario y permiso
+exports.eliminarUsuario = async (req, res) => {
+  const userId = req.params.id;
+
+  try {
+    const result = await UserModel.eliminarUsuarioConPermisos(userId);
+    res.json({ message: 'Usuario eliminado correctamente' });
+  } catch (err) {
+    console.error('Error al eliminar usuario:', err);
+    res.status(500).json({ message: 'Error al eliminar usuario' });
+  }
+};
+//Controlador de actualizador del usuarios con permiso
+exports.actualizarPermisos = async (req, res) => {
+  try {
+    const { usuario_id, permiso_id } = req.body;
+    console.log('rollllllllllllllllllllllllllllloooo', usuario_id, permiso_id);
+
+    if (!usuario_id || !Array.isArray(permiso_id)) {
+      return res.status(400).json({ message: 'Datos inválidos' });
+    }
+
+    const result = await UserModel.actualizarPermisosUsuario(usuario_id, permiso_id);
+    res.json({ message: 'Permisos actualizados correctamente' });
+  } catch (err) {
+    console.error('Error al actualizar permisos:', err);
+    res.status(500).json({ message: 'Error al actualizar permisos' });
+  }
+};
+
+
 
 
 

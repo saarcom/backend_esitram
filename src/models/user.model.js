@@ -2,54 +2,100 @@ const { password } = require('pg/lib/defaults.js');
 const pool = require('../db');
 
 //const UserModel = {
-  async function  findAll() {
-    const res = await pool.query('SELECT * FROM users');
-    return res.rows;
-  }
+async function findAll() {
+  const res = await pool.query(`
+    SELECT 
+  u.id,
+  u.name,
+  u.lastnamep,
+	u.lastnamem,
+	u.birthdate,
+	u.ci,
+	u.sex,
+  u.email,
+  u.role,
+  u.cargo,
+  u.unidadorganizacional,
+  u.sigla,
+  u.unidadadministrativa,
+  u.siglaadmi,
+	u.role_id,
 
-  async function  findById(id) {
-    const res = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-    return res.rows[0];
-  }
+COALESCE(json_agg(p.nombre) FILTER (WHERE p.id IS NOT NULL), '[]') AS permisos
+FROM users u
+LEFT JOIN usuario_permiso up ON u.id = up.usuario_id
+LEFT JOIN permiso p ON up.permiso_id = p.id
+GROUP BY 
+  u.id, u.name, u.email, u.role, u.cargo, 
+  u.unidadorganizacional, u.sigla, u.unidadadministrativa, u.siglaadmi;
+  `);
+  return res.rows;
+}
 
-  async function  create({ name,lastnamep, lastnamem, ci, birthdate, sex, email, password ,role }) {
-    const res = await pool.query(
-      'INSERT INTO users (name,lastnamep, lastnamem, ci, birthdate, sex, email, password ,role) VALUES ($1, $2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
-      [name,lastnamep, lastnamem, ci, birthdate, sex, email, password ,role ]
-    );
-    return res.rows[0];
-  }
+async function findById(id) {
+  const res = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+  return res.rows[0];
+}
 
-  async function  deleteById(id) {
-    const res = await pool.query('DELETE FROM users WHERE id = $1 RETURNING *', [id]);
-    return res.rows[0];
-  }
-
-  async function updateById(id, data) {
-  // Extraemos los campos que queremos actualizar (por ejemplo name y email)
-  const { name,lastnamep, lastnamem, ci, birthdate, sex, email, password ,role} = data;
-  console.log ("...........:", data)
+async function create({ name, lastnamep, lastnamem, ci, birthdate, sex, email, password, role }) {
   const res = await pool.query(
-   //`UPDATE users SET name = $1, email = $2, password = $3 ,role = $4 WHERE id = $5 RETURNING *`,
-     `UPDATE users SET name = $1,lastnamep =$2, lastnamem=$3, ci=$4, birthdate=$5, sex=$6, email = $7, password = $8 ,role = $9 WHERE id = $10 RETURNING *`,
-   // [name, email, password,role,id]
-    [name,lastnamep, lastnamem, ci, birthdate, sex, email, password ,role,id]
-);
+    'INSERT INTO users (name,lastnamep, lastnamem, ci, birthdate, sex, email, password ,role) VALUES ($1, $2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
+    [name, lastnamep, lastnamem, ci, birthdate, sex, email, password, role]
+  );
+  return res.rows[0];
+}
 
-  return res.rows[0]; // Retorna el usuario actualizado o undefined si no existe
+async function deleteById(id) {
+  const res = await pool.query('DELETE FROM users WHERE id = $1 RETURNING *', [id]);
+  return res.rows[0];
+}
+
+async function updateById(id, data) {
+  // Extraemos los campos que queremos actualizar (por ejemplo name y email)
+  const { name, lastnamep, lastnamem, ci, birthdate, sex, email, password, role, permisos } = data;
+  console.log("...........:", data)
+  const res = await pool.query(
+    //`UPDATE users SET name = $1, email = $2, password = $3 ,role = $4 WHERE id = $5 RETURNING *`,
+    `UPDATE users SET name = $1,lastnamep =$2, lastnamem=$3, ci=$4, birthdate=$5, sex=$6, email = $7, password = $8 ,role = $9 WHERE id = $10 RETURNING *`,
+    // [name, email, password,role,id]
+    [name, lastnamep, lastnamem, ci, birthdate, sex, email, password, role, id]
+  );
+
+  // 2. Si se enviaron permisos, actualizamos la tabla usuario_permiso
+  if (Array.isArray(permisos)) {
+    // Eliminamos permisos anteriores
+    await pool.query(`DELETE FROM usuario_permiso WHERE usuario_id = $1`, [id]);
+
+    // Insertamos los nuevos permisos
+    for (const permisoId of permisos) {
+      await pool.query(
+        `INSERT INTO usuario_permiso (usuario_id, permiso_id) VALUES ($1, $2)`,
+        [id, permisoId]
+      );
+    }
+  }
+
+  // 3. Retornamos el usuario actualizado junto con sus permisos
+  const usuarioConPermisos = await pool.query(`
+    SELECT u.id, u.name, u.lastnamep, u.lastnamem, u.ci, u.birthdate, u.sex,u.email, u.role,
+    COALESCE(json_agg(p.id) FILTER (WHERE p.id IS NOT NULL), '[]') AS permisos
+    FROM users u
+    LEFT JOIN usuario_permiso up ON u.id = up.usuario_id
+    LEFT JOIN permiso p ON up.permiso_id = p.id
+    WHERE u.id = $1
+    GROUP BY u.id
+  `, [id]);
+
+
+
+  return usuarioConPermisos.rows[0]; // Retorna el usuario actualizado o undefined si no existe
 }
 
 
-async function  loginUser (email, password) {
-/*
-  const res = await pool.query(
-    'SELECT * FROM users WHERE email = $1 AND password = $2',
-    [email, password]
-  );
-  console.log("----", res.rows[0])
-  return res.rows[0]; 
-*/
-const res = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+
+async function loginUser(email, password) {
+
+  const res = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
 
   if (res.rows.length === 0) {
     return null; // Usuario no encontrado
@@ -58,12 +104,13 @@ const res = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
   const user = res.rows[0];
 
   // 2. Comparar contraseñas
- /* const passwordMatch = await bcrypt.compare(password, user.password);
-  if (!passwordMatch) {
-    return null; // Contraseña incorrecta
-  }*/
+  /* const passwordMatch = await bcrypt.compare(password, user.password);
+   if (!passwordMatch) {
+     return null; // Contraseña incorrecta
+   }*/
 
   // 3. Obtener permisos según rol
+  console.log('...............>')
   let permisosRes;
   if (user.role_id === 1) {
     // Admin: todos los permisos del rol
@@ -85,21 +132,149 @@ const res = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
 
   const permisos = permisosRes.rows.map(row => row.nombre);
 
-    console.log("----", res.rows[0], permisos)
+  console.log("----", res.rows[0], permisos)
   //return res.rows[0],permisos; 
-  return {user,permisos}
+  return { user, permisos }
 
 };
 
 
- async function  getUserById (id) {
-    const res = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-    return res.rows[0];
-  }
+async function getUserById(id) {
+  const res = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+  return res.rows[0];
+}
 
 
 
 //};
+
+
+// para crer un usuario con permisos
+async function crearUsuarioConPermisos(usuario, permisosIds = []) {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. Insertar nuevo usuario
+    const insertUserQuery = `
+      INSERT INTO users (name, lastnamep, lastnamem, email, password, role_id, role)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id
+    `;
+
+    const values = [
+      usuario.name,
+      usuario.lastnamep,
+      usuario.lastnamem,
+      usuario.email,
+      usuario.password,     // En un caso real, encripta esta contraseña con bcrypt
+      usuario.role_id,
+      usuario.role
+    ];
+
+    const res = await client.query(insertUserQuery, values);
+    const newUserId = res.rows[0].id;
+
+    // 2. Insertar permisos si es un usuario (NO admin)
+    if (usuario.role_id !== 1 && permisosIds.length > 0) {
+      const insertPermisos = `
+        INSERT INTO usuario_permiso (usuario_id, permiso_id)
+        VALUES ${permisosIds.map((_, i) => `($1, $${i + 2})`).join(', ')}
+      `;
+      await client.query(insertPermisos, [newUserId, ...permisosIds]);
+    }
+
+    await client.query('COMMIT');
+    return { success: true, userId: newUserId };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+
+/// para ver los permisos disponibles
+async function permisoAll() {
+  const res = await pool.query('select * FROM permiso');
+  return res.rows;
+}
+
+
+// para eliminara el usuario con sus respectivos permisos:
+async function eliminarUsuario(userId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    await client.query('DELETE FROM users WHERE id = $1', [userId]);
+
+    await client.query('COMMIT');
+    return { success: true };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// actualizar los permisos de un usuario: quitar los anteriores y asignar los nuevos.
+async function actualizarPermisosUsuario(usuarioId, nuevosPermisosIds = []) {
+  const client = await pool.connect();
+  console.log('----------->', usuarioId, nuevosPermisosIds);
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. Eliminar permisos actuales
+    await client.query(
+      'DELETE FROM usuario_permiso WHERE usuario_id = $1',
+      [usuarioId]
+    );
+
+    // 2. Insertar nuevos permisos si hay
+    if (nuevosPermisosIds.length > 0) {
+      const insertQuery = `
+        INSERT INTO usuario_permiso (usuario_id, permiso_id)
+        VALUES ${nuevosPermisosIds.map((_, i) => `($1, $${i + 2})`).join(', ')}
+      `;
+      await client.query(insertQuery, [usuarioId, ...nuevosPermisosIds]);
+    }
+
+    await client.query('COMMIT');
+    return { success: true };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// para ver los usuarios con sus respectivos permisos
+
+async function getUserById(id) {
+  // Obtener los datos del usuario
+  const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+  if (userRes.rows.length === 0) return null;
+
+  const user = userRes.rows[0];
+
+  // Obtener los permisos asignados al usuario
+  const permisosRes = await pool.query(
+    'SELECT permiso_id FROM usuario_permiso WHERE usuario_id = $1',
+    [id]
+  );
+
+  // Extraer solo los IDs de permisos
+  const permisos = permisosRes.rows.map(p => p.permiso_id);
+
+  // Devolver el usuario con sus permisos
+  return { ...user, permisos };
+}
 
 module.exports = {
   findAll,
@@ -108,5 +283,10 @@ module.exports = {
   deleteById,  // exporta esta función
   updateById,
   loginUser,
-  getUserById 
+  getUserById,
+  crearUsuarioConPermisos,
+  permisoAll,
+  eliminarUsuario,
+  actualizarPermisosUsuario
+
 };
