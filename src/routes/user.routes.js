@@ -1,21 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/user.controller'); // <--- aquí entra
+const oficina_userController = require('../controllers/oficina_user.controller');
 const { isAuthenticated, hasRole } = require('../middlewares/auth.middleware');
-
-
-/**
- * 
- * isAuthenticated: asegura que el usuario esté logueado.
-
-hasRole('superadmin'): asegura que el usuario tenga rol específico.
-
-Reutilizas lógica limpia, sin repetir código.
-
-
- */
-// Ruta protegida por login
-
 
 router.get('/mi-pagina', isAuthenticated, (req, res) => {
   const user = req.session.user;
@@ -24,8 +11,6 @@ router.get('/mi-pagina', isAuthenticated, (req, res) => {
     datos: user
   });
 });
-
-// par ver permisos de un usaario x
 
 
 /*
@@ -51,6 +36,8 @@ router.post('/login', userController.accederUsuario);
 //rolo: para crear usuarios con permiso ,, solo el admin puede crear
   router.post('/crear', userController.crearUsuario);
 
+
+  
 
 
 module.exports = router;

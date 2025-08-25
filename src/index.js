@@ -29,7 +29,9 @@ require('dotenv').config();             // 1. Carga variables de entorno
 const express = require('express');     // 2. Importa express
 const session = require('express-session'); // 3. Importa express-session
 const cors = require('cors');
-const userRoutes = require('./routes/user.routes');
+const userRoutes = require('./routes/user.routes');  // ruta de los uusarios
+const oficinaUserRoutes = require('./routes/oficina_user.routes'); // ruta de los usuario que pertenecen a una oficina
+const tramiteUserRoutes = require('./routes/tramite_user.routes');
 
 const app = express();                  // 4. Crea la app de express
 
@@ -55,7 +57,14 @@ app.use(session({
 }));
 
 // 8. Rutas
-app.use('/api/users', userRoutes);
+app.use('/api/users', userRoutes);  /// app principal de usuarios
+ 
+app.use('/api/user-oficina', oficinaUserRoutes);  // app pincipal de user-oficina
+
+//app.use('/api/user-oficina', oficinaUserRoutes);
+
+app.use('/api/user-tramite',tramiteUserRoutes); // app pincipal de user-tramite
+
 
 // 9. Inicia el servidor
 const PORT = process.env.PORT || 3000;
